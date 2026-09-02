@@ -63,6 +63,7 @@ main{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:0}
 .card-thumb:hover .rm{display:block}
 .card-thumb .badge{position:absolute;left:2px;top:2px;font-size:11px;font-weight:800;color:#111;border-radius:4px;padding:0 5px;line-height:16px;box-shadow:0 1px 3px rgba(0,0,0,.6)}
 .card-thumb.placed img{opacity:.35}
+.card-thumb .badge.var{background:#1d2330;color:#c1b0ff;border:1px solid var(--accent);letter-spacing:.3px}
 .card-thumb .ins{position:absolute;left:-4px;top:0;bottom:0;width:3px;background:var(--accent2);display:none}
 .drop-indicator{width:3px;height:var(--thumb-h);background:var(--accent2);border-radius:2px;flex:0 0 3px;margin:0 -4.5px}
 #addTier{margin-top:4px}
@@ -180,7 +181,7 @@ footer a{color:var(--muted)}
   </aside>
 </main>
 <footer>
-  Card data and images from Riot Games' public Riftbound gallery, refreshed weekly (<span id="updated"></span>).
+  Card data and images from Riot Games' public Riftbound gallery, plus promo and rune prints Riot omits from TCGplayer's catalog, refreshed weekly (<span id="updated"></span>).
   Riftbound is a trademark of Riot Games; this is a fan tool and is not endorsed by Riot.
   Lists are saved in your browser only. Share links carry the whole list, so they work anywhere.
   <a href="https://github.com/shizukaziye/riftbound-tierlist">Source</a>
@@ -193,8 +194,10 @@ footer a{color:var(--muted)}
 /* ---------- constants ---------- */
 const DOM_COLORS={Fury:'#e5484d',Calm:'#46a758',Mind:'#3e8ef7',Body:'#f76b15',Chaos:'#8e4ec6',Order:'#f5d90a',Colorless:'#9aa0a6'};
 const TYPES=['Unit','Spell','Gear','Rune','Legend','Battlefield'];
-const SET_ORDER=['OGN','OGS','SFD','UNL','VEN','RAD'];
-const RARITY_RANK={Common:0,Uncommon:1,Rare:2,Epic:3,Showcase:9};
+const SET_ORDER=['OGN','OGS','SFD','UNL','VEN','RAD','PR','OPP','SGN'];
+const RARITY_RANK={Common:0,Uncommon:1,Rare:2,Epic:3};
+const VARIANT_CLASSES=['Alt Art','Overnumbered','Signature','Promo','Token'];
+const VARIANT_BADGE={'Alt Art':'ALT',Overnumbered:'ON',Signature:'SIG',Promo:'PROMO',Token:'TOKEN'};
 const PALETTE=['#ff7f7f','#ffbf7f','#ffdf7f','#ffff7f','#bfff7f','#7fff7f','#7fffff','#7fbfff','#7f7fff','#ff7fff','#bfbfbf','#ffffff'];
 const DEFAULT_TIERS=[['S','#ff7f7f'],['A','#ffbf7f'],['B','#ffdf7f'],['C','#ffff7f'],['D','#bfff7f'],['F','#7fbfff']];
 const LS_CUR='rbtl:current', LS_LISTS='rbtl:lists';
@@ -214,7 +217,7 @@ function $(s,el){return (el||document).querySelector(s);}
 function el(tag,attrs,children){const e=document.createElement(tag);if(attrs)for(const k in attrs){if(k==='class')e.className=attrs[k];else if(k==='text')e.textContent=attrs[k];else if(k.startsWith('on'))e.addEventListener(k.slice(2),attrs[k]);else e.setAttribute(k,attrs[k]);}
   if(children)for(const c of [].concat(children))if(c!=null)e.append(c.nodeType?c:document.createTextNode(c));return e;}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('show'),2200);}
-function thumbUrl(c,w){return c.u+'&w='+(w||THUMB_W)+'&auto=format';}
+function thumbUrl(c,w){if(c.src==='tcg')return (w||THUMB_W)>300?c.u:c.u.replace('_in_1000x1000','_400w');return c.u+'&w='+(w||THUMB_W)+'&auto=format';}
 function isLand(c){return c.o==='l';}
 function placedIn(code){for(let i=0;i<state.tiers.length;i++){if(state.tiers[i].cards.includes(code))return i;}return -1;}
 function textColorFor(hex){const n=parseInt(hex.slice(1),16);const r=n>>16,g=(n>>8)&255,b=n&255;return (r*299+g*587+b*114)/1000>140?'#111':'#fff';}
@@ -225,17 +228,17 @@ async function loadCards(){
   const d=await r.json();
   CARDS=d.cards; SETS=d.sets;
   $('#updated').textContent='data '+d.updated;
-  for(const c of CARDS){BY_CODE.set(c.c,c);c.hay=(c.n+' '+c.c+' '+c.t+' '+c.d.join(' ')+' '+(c.g||[]).join(' ')+' '+c.r).toLowerCase();c.txt=(c.x||'').toLowerCase();}
+  for(const c of CARDS){BY_CODE.set(c.c,c);c.hay=(c.n+' '+c.n.replace(/['’.,-]/g,'')+' '+c.c+' '+c.t+' '+c.d.join(' ')+' '+(c.g||[]).join(' ')+' '+(c.g||[]).join(' ').replace(/['’.,-]/g,'')+' '+c.r+' '+(c.br||'')).toLowerCase();c.txt=(c.x||'').toLowerCase();}
   // Group identical cards (reprints, showcase alt arts) under one primary print.
   const groups=new Map();
   for(const c of CARDS){const k=[c.n,c.t,c.x||'',c.e||'',c.m||'',c.p||'',c.d.join(',')].join('|');if(!groups.has(k))groups.set(k,[]);groups.get(k).push(c);}
   for(const g of groups.values()){
-    g.sort((a,b)=>(RARITY_RANK[a.r]??5)-(RARITY_RANK[b.r]??5)||/[a-z*]$/i.test(a.c)-/[a-z*]$/i.test(b.c)||SET_ORDER.indexOf(a.s)-SET_ORDER.indexOf(b.s)||a.c.localeCompare(b.c));
+    g.sort((a,b)=>(a.v?1:0)-(b.v?1:0)||(RARITY_RANK[a.r]??5)-(RARITY_RANK[b.r]??5)||SET_ORDER.indexOf(a.s)-SET_ORDER.indexOf(b.s)||a.c.localeCompare(b.c));
     for(const c of g){c.primary=g[0].c;c.variants=g.length;}
     PRIMARY.set(g[0].c,g);
   }
   const fs=$('#fSet');for(const s of SETS)fs.append(el('option',{value:s.i,text:s.n+' ('+s.i+')'}));
-  const fr=$('#fRarity');for(const r of ['Common','Uncommon','Rare','Epic','Showcase'])fr.append(el('option',{value:r,text:r}));
+  const fr=$('#fRarity');for(const r of ['Common','Uncommon','Rare','Epic'])fr.append(el('option',{value:r,text:r}));const og=el('optgroup',{label:'Print type'});for(const r of VARIANT_CLASSES)og.append(el('option',{value:r,text:r}));fr.append(og);
 }
 
 /* ---------- search ---------- */
@@ -243,8 +246,9 @@ function runSearch(){
   const q=$('#q').value.trim().toLowerCase();
   const toks=q.split(/\s+/).filter(Boolean);
   const out=[];
+  const showVariants=filters.showAll||VARIANT_CLASSES.includes(filters.rarity);
   for(const c of CARDS){
-    if(!filters.showAll&&c.primary!==c.c)continue;
+    if(!showVariants&&c.primary!==c.c)continue;
     if(filters.types.size&&!filters.types.has(c.t))continue;
     if(filters.doms.size&&!c.d.some(d=>filters.doms.has(d)))continue;
     if(filters.set&&c.s!==filters.set)continue;
@@ -252,10 +256,10 @@ function runSearch(){
     if(filters.hidePlaced&&placedIn(c.c)>=0)continue;
     let score=0;
     if(toks.length){
-      const name=c.n.toLowerCase();
+      const name=c.n.toLowerCase().replace(/’/g,"'");const bare=name.replace(/['.,-]/g,'');
       for(const t of toks){
         let s=0;
-        if(name===t)s=10;else if(name.startsWith(t))s=6;else if(name.split(/[\s'-]+/).some(w=>w.startsWith(t)))s=5;else if(name.includes(t))s=4;
+        if(name===t||bare===t)s=10;else if(name.startsWith(t)||bare.startsWith(t))s=6;else if(name.split(/[\s'-]+/).some(w=>w.startsWith(t)))s=5;else if(name.includes(t)||bare.includes(t))s=4;
         else if(c.c.toLowerCase().includes(t))s=5;else if(c.hay.includes(t))s=2;else if(c.txt.includes(t))s=1;
         if(!s){score=0;break;}score+=s;
       }
@@ -292,7 +296,7 @@ function makeThumb(c,opt){
   if(opt.result){
     const ti=placedIn(c.c);
     if(ti>=0){t.classList.add('placed');const b=el('span',{class:'badge',text:state.tiers[ti].label.slice(0,3)});b.style.background=state.tiers[ti].color;b.style.color=textColorFor(state.tiers[ti].color);t.append(b);}
-    else if(filters.showAll&&c.variants>1&&c.primary!==c.c){t.append(el('span',{class:'badge',text:'alt'}));}
+    else if(c.v){t.append(el('span',{class:'badge var',text:VARIANT_BADGE[c.v]||'ALT'}));}
     t.dataset.index=opt.index;
   }else{
     t.append(el('button',{class:'rm',text:'×',title:'Remove from tier',onclick:e=>{e.stopPropagation();removeCard(c.c);}}));
@@ -327,7 +331,7 @@ function showPreview(c){
   const info=el('div',{class:'info'});
   info.append(el('h3',{text:c.n}));
   const setName=(SETS.find(s=>s.i===c.s)||{}).n||c.s;
-  info.append(el('div',{class:'meta',text:c.c+' · '+setName+' · '+c.r+(c.variants>1?' · '+c.variants+' printings':'')}));
+  info.append(el('div',{class:'meta',text:c.c+' · '+setName+' · '+c.r+(c.pm&&c.r!=='Promo'?' · Promo':'')+(c.br?' ('+c.br+')':'')+(c.variants>1?' · '+c.variants+' printings':'')}));
   const st=el('div',{class:'stats'});
   st.append(el('span',{text:c.t||'Token'}));
   for(const d of c.d){const s=el('span');s.append(el('i',{class:'dom',style:'background:'+DOM_COLORS[d]}),d);st.append(s);}
@@ -470,7 +474,7 @@ function commit(rerenderResults){
 function refreshResultBadges(){
   if(filters.hidePlaced){runSearch();return;}
   document.querySelectorAll('#results .card-thumb').forEach(t=>{
-    const code=t.dataset.code,ti=placedIn(code);const old=t.querySelector('.badge');if(old&&old.textContent!=='alt')old.remove();
+    const code=t.dataset.code,ti=placedIn(code);const old=t.querySelector('.badge:not(.var)');if(old)old.remove();const vb=t.querySelector('.badge.var');if(vb)vb.classList.toggle('hidden',ti>=0);
     t.classList.toggle('placed',ti>=0);
     if(ti>=0){const b=el('span',{class:'badge',text:state.tiers[ti].label.slice(0,3)});b.style.background=state.tiers[ti].color;b.style.color=textColorFor(state.tiers[ti].color);t.append(b);}
   });
