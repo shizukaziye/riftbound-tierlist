@@ -1,0 +1,30 @@
+name: refresh-data
+
+on:
+  schedule:
+    - cron: "30 9 * * 2"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The script refuses to write a suspiciously small catalog, so a broken
+      # source can't wipe good data.
+      - name: Bake card catalog
+        run: python3 scripts/build_cards.py
+      - name: Commit changes
+        run: |
+          git config user.name "Shizukaziye"
+          git config user.email "lxpi94@gmail.com"
+          git add data/
+          git diff --cached --quiet && echo "no changes" && exit 0
+          git commit -m "Refresh card catalog"
+          git push
